@@ -4,6 +4,8 @@ A remote-friendly Android / Fire TV media player with an optional self-hosted me
 
 [Download the signed APK](https://github.com/danieljglover/kmay/releases/latest/download/kmay.apk) · [Releases](https://github.com/danieljglover/kmay/releases)
 
+Downloader code: **5527034** · Short link: [aftv.news/5527034](https://aftv.news/5527034). This points to the latest APK release.
+
 ## Install
 
 Use Downloader on a compatible Android-based Fire TV to open the APK download link, allow Downloader to install apps, and install KMay. Android 6 or later is required. Vega OS does not run this Android APK.
