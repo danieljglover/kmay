@@ -1,0 +1,5 @@
+Generated with the built-in imagegen tool, 24 October 2026.
+
+Create a polished original app logo for KMay, a personal film and TV streaming application. Square 1024x1024 HD icon artwork. A bold compact stylized letter K whose negative space forms a right-facing play triangle, enclosed in a softly rounded television-screen silhouette. Clean geometric vector-like edges, exceptional small-size legibility, modern entertainment/social video energy. Deep near-black charcoal full background, luminous lavender-purple main mark, restrained electric cyan offset edge highlight and a subtle magenta accent. Flat graphic construction with very restrained depth. Centered emblem fills 65 percent of canvas with generous safe margin. No words or extra text, no music note, no existing brand logos, no mockup, no watermark. Deliver one final square image.
+
+The original generated image is preserved as kmay-logo-hd.png. Android uses an identical copy in drawable-nodpi and scales it for the launcher, TV banner and sidebar.

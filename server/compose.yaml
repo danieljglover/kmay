@@ -1,0 +1,27 @@
+services:
+  proxy:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${KMAY_BIND:-127.0.0.1}:8788:8788"
+    environment:
+      KMAY_TOKEN: ${KMAY_TOKEN:?Set a random access token}
+      KMAY_DATA: /data
+      TZ: Europe/London
+    volumes:
+      - ./data:/data
+    shm_size: 256mb
+    mem_limit: 3g
+    cpus: 2
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/healthz',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "3"

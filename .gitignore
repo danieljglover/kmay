@@ -1,0 +1,13 @@
+.gradle/
+**/build/
+local.properties
+.signing/
+*.jks
+*.keystore
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+server/data/
+dist/
+*.log
