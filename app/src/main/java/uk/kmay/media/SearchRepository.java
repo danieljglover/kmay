@@ -17,7 +17,13 @@ final class SearchRepository implements AutoCloseable {
         volatile Future<?> future;
         volatile ScheduledFuture<?> deadline;
         final AtomicBoolean finished=new AtomicBoolean();
-        void stop(){if(connection!=null)connection.disconnect();if(future!=null)future.cancel(true);if(deadline!=null)deadline.cancel(false);}
+        void stop(ExecutorService cleanup){
+            if(future!=null)future.cancel(true);
+            if(deadline!=null)deadline.cancel(false);
+            // Disconnect may drain a TLS socket. TextWatcher and IME callbacks run on the UI thread.
+            HttpURLConnection active=connection;
+            if(active!=null)cleanup.submit(active::disconnect);
+        }
     }
     static final class Cache {
         static final long TTL=300_000;
@@ -40,6 +46,7 @@ final class SearchRepository implements AutoCloseable {
     }
     final ThreadPoolExecutor workers=(ThreadPoolExecutor)Executors.newFixedThreadPool(4);
     final ScheduledExecutorService timer=Executors.newSingleThreadScheduledExecutor();
+    final ExecutorService cleanup=Executors.newSingleThreadExecutor();
     final List<Ticket> tickets=new ArrayList<>();
     final Cache cache=new Cache();
     final Executor delivery;
@@ -51,7 +58,7 @@ final class SearchRepository implements AutoCloseable {
     SearchRepository(Executor delivery){this(delivery,SearchRepository::http,8000);}
     SearchRepository(Executor delivery,Fetcher fetcher,long timeout){this.delivery=delivery;this.fetcher=fetcher;this.timeout=timeout;}
     void configure(String configuration){if(!this.configuration.equals(configuration)){cancel();cache.clear();this.configuration=configuration;}}
-    void cancel(){generation++;synchronized(tickets){for(Ticket ticket:tickets){ticket.finished.set(true);ticket.stop();}tickets.clear();}workers.purge();}
+    void cancel(){generation++;synchronized(tickets){for(Ticket ticket:tickets){ticket.finished.set(true);ticket.stop(cleanup);}tickets.clear();}workers.purge();}
 
     static String encode(String value){try{return URLEncoder.encode(value,"UTF-8").replace("+","%20");}catch(UnsupportedEncodingException e){throw new AssertionError(e);}}
     static String url(SearchModel.Provider p,String query,int offset){
@@ -64,11 +71,11 @@ final class SearchRepository implements AutoCloseable {
         long start=System.nanoTime();
         ticket.future=workers.submit(()->{
             if(ticket.finished.get())return;
+            try {
             ticket.deadline=timer.schedule(()->{
                 finish(ticket,current,provider,offset,Collections.emptyList(),true,start,listener);
-                ticket.stop();
+                ticket.stop(cleanup);
             },timeout,TimeUnit.MILLISECONDS);
-            try {
                 String json=cache.get(key,System.currentTimeMillis());
                 if(json==null) {
                     json=fetcher.fetch(url,ticket);
@@ -112,5 +119,5 @@ final class SearchRepository implements AutoCloseable {
             }
         }finally{connection.disconnect();ticket.connection=null;}
     }
-    @Override public void close(){cancel();workers.shutdownNow();timer.shutdownNow();cache.clear();}
+    @Override public void close(){cancel();workers.shutdownNow();timer.shutdownNow();cleanup.shutdown();cache.clear();}
 }

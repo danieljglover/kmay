@@ -8,6 +8,24 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
 public class SearchTest {
+    @Test public void cancellingAnActiveConnectionNeverDisconnectsOnCallerThread()throws Exception{
+        Thread caller=Thread.currentThread();
+        CountDownLatch connected=new CountDownLatch(1),disconnected=new CountDownLatch(1);
+        AtomicReference<Thread> cleanupThread=new AtomicReference<>();
+        SearchRepository repo=new SearchRepository(Runnable::run,(u,t)->{
+            t.connection=new java.net.HttpURLConnection(new java.net.URL(u)){
+                public void connect(){} public boolean usingProxy(){return false;}
+                public void disconnect(){cleanupThread.set(Thread.currentThread());disconnected.countDown();}
+            };
+            connected.countDown();Thread.sleep(5000);return "{metas:[]}";
+        },8000);
+        try{
+            repo.fetch(provider(),"first",0,(p,o,i,f,m)->fail("Cancelled request delivered"));
+            assertTrue(connected.await(2,TimeUnit.SECONDS));repo.cancel();
+            assertTrue(disconnected.await(2,TimeUnit.SECONDS));
+            assertNotSame("Socket cleanup must not run in the text/voice input callback",caller,cleanupThread.get());
+        }finally{repo.close();}
+    }
     JSONObject item(String id,String name,String type,String base)throws Exception{return new JSONObject().put("id",id).put("name",name).put("type",type).put("_base",base);}
     SearchModel.Provider provider(){return new SearchModel.Provider("https://test.invalid","titles","movie","Test",true,Collections.emptyList());}
 

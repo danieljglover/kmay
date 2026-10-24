@@ -90,13 +90,16 @@ final class SearchScreen implements AutoCloseable {
     void updateFilters(){for(int i=0;i<filters.size();i++){Button b=filters.get(i);boolean selected=type.equals(new String[]{"","movie","series"}[i]);b.setText((selected?"✓ ":"")+b.getTag());b.setContentDescription(b.getTag()+(selected?", selected":""));}}
     void submit(){
         hideKeyboard();run(true);remember();
-        if(!displayed.isEmpty())grid.post(()->{RecyclerView.ViewHolder holder=grid.findViewHolderForAdapterPosition(0);if(holder!=null)holder.itemView.requestFocus();});
+        int submittedGeneration=repository.generation;
+        if(!displayed.isEmpty())grid.post(()->{if(!visible||submittedGeneration!=repository.generation)return;RecyclerView.ViewHolder holder=grid.findViewHolderForAdapterPosition(0);if(holder!=null)holder.itemView.requestFocus();});
     }
     void hideKeyboard(){((InputMethodManager)app.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(),0);}
     void run(boolean explicit){
         if(debounce!=null)handler.removeCallbacks(debounce);
         repository.cancel();repository.configure(app.arrayPref("addons").toString());
         results.clear();displayed.clear();nextPages.clear();failedPages.clear();inFlight.clear();pending=0;focusedKey="";
+        // A new query replaces the entire list, even when the remote left focus in the grid.
+        adapter.notifyDataSetChanged();
         request=new SearchModel.Request(input.getText().toString(),type);
         long start=System.nanoTime();
         SearchModel.Providers selected=SearchModel.providers(app.arrayPref("addons"),type);providers.clear();providers.addAll(selected.available);unsupported=selected.unsupported;

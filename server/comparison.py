@@ -7,8 +7,9 @@ from verification import probe, scoped_headers
 from discovery import safe_error
 
 
-async def measure(network, stream):
-    targets = await probe(network, stream)
+async def measure(network, stream, targets=None):
+    if targets is None:
+        targets = await probe(network, stream)
     rates, latencies = [], []
     # Two small samples, including a later HLS segment when available.
     for url in (targets if len(targets) > 1 else targets * 2):
@@ -41,9 +42,10 @@ async def measure(network, stream):
 
 
 class Comparisons:
-    def __init__(self, network, providers, relay, budget=20, measure_fn=measure):
+    def __init__(self, network, providers, relay, budget=60, measure_fn=measure, test_budget=20):
         self.network, self.providers, self.relay = network, providers, relay
         self.budget, self.measure = budget, measure_fn
+        self.test_budget = test_budget
         self.jobs = {}
 
     def start(self, title, candidates, base):
@@ -60,24 +62,49 @@ class Comparisons:
         return key
 
     async def run(self, job, title):
-        resolve_slots, sample_slot = asyncio.Semaphore(3), asyncio.Semaphore(1)
+        resolve_slots, probe_slots, sample_slot = asyncio.Semaphore(6), asyncio.Semaphore(4), asyncio.Semaphore(1)
 
         async def check(row):
             try:
                 async with resolve_slots:
                     row['state'] = 'resolving'
-                    streams = await self.providers.resolve(row['id'], title)
+                    async with asyncio.timeout(30):
+                        streams = await self.providers.resolve(row['id'], title)
                 if not streams:
                     row['state'] = 'unavailable'
                     return
                 row['state'] = 'waiting'
+                remaining = self.test_budget
+                row['connected_seconds'] = round(time.monotonic()-job['started'], 1)
                 # Round-robin scheduling at the sample lock lets other providers run.
                 for stream in streams[:6]:
+                    if remaining <= 0:
+                        break
                     try:
+                        targets = None
+                        if self.measure is measure:
+                            # Validate hosts concurrently; never occupy the bandwidth test slot
+                            # while waiting for a manifest, audio track or blocked segment.
+                            async with probe_slots:
+                                row['state'] = 'validating'
+                                started = time.monotonic()
+                                try:
+                                    async with asyncio.timeout(remaining):
+                                        targets = await probe(self.network, stream)
+                                finally:
+                                    remaining -= time.monotonic()-started
+                                    row['test_seconds'] = round(self.test_budget-max(0, remaining), 1)
+                            row['state'] = 'waiting'
                         async with sample_slot:
                             row['state'] = 'testing'
-                            async with asyncio.timeout(6):
-                                result = await self.measure(self.network, stream)
+                            started = time.monotonic()
+                            try:
+                                async with asyncio.timeout(max(0, remaining)):
+                                    result = await (self.measure(self.network, stream, targets)
+                                                    if self.measure is measure else self.measure(self.network, stream))
+                            finally:
+                                remaining -= time.monotonic()-started
+                                row['test_seconds'] = round(self.test_budget-max(0, remaining), 1)
                         row['working'] += 1
                         job['results'].append({'provider': row['id'], 'name': row['name'],
                                                'stream': stream, **result})
@@ -85,10 +112,10 @@ class Comparisons:
                         row['reason'] = 'Sample check timed out' if isinstance(exc,TimeoutError) else safe_error(exc)
                     row['tested'] += 1
                     row['state'] = 'waiting'
-                row['state'] = 'ready' if row['working'] else 'unavailable'
+                row['state'] = 'ready' if row['working'] else ('timed_out' if remaining <= 0 else 'unavailable')
             except Exception as exc:
                 row['state'] = 'unavailable'
-                row['reason'] = safe_error(exc)
+                row['reason'] = 'Finding video links timed out' if isinstance(exc, TimeoutError) else safe_error(exc)
 
         tasks = [asyncio.create_task(check(row)) for row in job['rows']]
         try:
@@ -129,7 +156,7 @@ class Comparisons:
                     except Exception:
                         continue
             streams = job['streams']
-        return {'id': key, 'state': job['state'], 'budget_seconds': self.budget,
+        return {'id': key, 'state': job['state'], 'budget_seconds': self.budget, 'test_budget_seconds': self.test_budget,
                 'elapsed_seconds': round(job.get('elapsed', min(self.budget, time.monotonic()-job['started'])), 1),
                 'providers': job['rows'], 'working': len(results), 'streams': streams}
 

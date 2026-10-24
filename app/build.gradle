@@ -5,7 +5,7 @@ if (signingFile.exists()) signingFile.withInputStream { signing.load(it) }
 android {
     namespace 'uk.kmay.media'
     compileSdk 35
-    defaultConfig { applicationId 'uk.kmay.media'; minSdk 23; targetSdk 35; versionCode 6; versionName '2.1.1'; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
+    defaultConfig { applicationId 'uk.kmay.media'; minSdk 23; targetSdk 35; versionCode 7; versionName '2.1.2'; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
     compileOptions { coreLibraryDesugaringEnabled true; sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     signingConfigs { personal { if (signingFile.exists()) { storeFile file(signing.storeFile); storePassword signing.storePassword; keyAlias signing.keyAlias; keyPassword signing.keyPassword } } }
     buildTypes {

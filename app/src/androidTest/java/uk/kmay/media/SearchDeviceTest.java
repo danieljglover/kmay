@@ -16,6 +16,39 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Runs on Android, not the workstation JVM. Uses synthetic data only. */
 public class SearchDeviceTest {
+    @Test public void testRapidImeAndVoiceReplacementWithFocusedResults()throws Exception{
+        android.app.Instrumentation device=InstrumentationRegistry.getInstrumentation();
+        Context context=device.getTargetContext();assertTrue(context.getPackageName().endsWith(".debug"));
+        JSONArray saved=new JSONArray();
+        for(int i=0;i<60;i++)saved.put(new JSONObject().put("id","open:stress"+i).put("name","Fixture title "+i).put("type","movie"));
+        context.getSharedPreferences("kmay",0).edit().clear().putString("saved",saved.toString()).commit();
+        MainActivity a=(MainActivity)device.startActivitySync(new Intent().setClassName(context,"uk.kmay.media.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try{
+            device.runOnMainSync(()->{a.search();a.searchScreen.input.setText("Fixture");a.searchScreen.run(true);});
+            device.waitForIdleSync();SearchScreen screen=a.searchScreen;
+            AtomicBoolean reset=new AtomicBoolean();
+            device.runOnMainSync(()->{
+                device.setInTouchMode(false);assertTrue(screen.grid.findViewHolderForAdapterPosition(0).itemView.requestFocus());
+                screen.adapter.registerAdapterDataObserver(new androidx.recyclerview.widget.RecyclerView.AdapterDataObserver(){@Override public void onChanged(){reset.set(true);}});
+                Intent speech=new Intent().putStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS,new ArrayList<>(Arrays.asList("Fixture title 59")));
+                screen.voiceResult(android.app.Activity.RESULT_OK,speech);
+                assertTrue("Replacing a focused result list must notify a full reset",reset.get());
+            });
+            device.waitForIdleSync();
+            for(int i=0;i<25;i++){
+                final int iteration=i;
+                device.runOnMainSync(()->{
+                    screen.input.requestFocus();screen.input.selectAll();
+                    android.view.inputmethod.InputConnection ime=screen.input.onCreateInputConnection(new android.view.inputmethod.EditorInfo());
+                    ime.beginBatchEdit();ime.setComposingText("Fixture "+iteration,1);ime.commitText("Fixture title "+iteration,1);ime.endBatchEdit();
+                    ime.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+                });
+                Thread.sleep(35);
+            }
+            device.waitForIdleSync();
+            device.runOnMainSync(()->{assertFalse(a.isFinishing());assertEquals("Fixture title 24",screen.request.query);assertEquals(screen.displayed.size(),screen.adapter.getItemCount());});
+        }finally{device.runOnMainSync(a::finish);}
+    }
     @Test public void testHttpPaginationPartialFailureAndRetry()throws Exception{
         android.app.Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();Context context=instrumentation.getTargetContext();
         assertTrue(context.getPackageName().endsWith(".debug"));

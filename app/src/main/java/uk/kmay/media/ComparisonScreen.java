@@ -20,8 +20,8 @@ final class ComparisonScreen {
         this.a=a;generation=a.generation;
         base=a.prefs.getString("proxyUrl","");token=a.prefs.getString("proxyToken","");
         status=a.sourceStatus;status.setText("Choosing the best source");
-        explanation=a.text("Your server will test small video samples for up to 20 seconds, then play the best tested source automatically.",15,MainActivity.MUTED);a.body.addView(explanation);
-        progress=new ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(200);
+        explanation=a.text("Finding video links, then testing each source for up to 20 seconds. Queue time does not use its test allowance. The comparison ends within 60 seconds and plays the best tested source automatically.",15,MainActivity.MUTED);a.body.addView(explanation);
+        progress=new ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);progress.setMax(600);
         LinearLayout.LayoutParams bar=new LinearLayout.LayoutParams(-1,a.dp(8));bar.setMargins(0,a.dp(20),0,a.dp(16));a.body.addView(progress,bar);
         LinearLayout line=a.row();spinner=new ProgressBar(a);line.addView(spinner,new LinearLayout.LayoutParams(a.dp(24),a.dp(24)));
         activity=a.text("Contacting your media server...",15,MainActivity.INK);activity.setPadding(a.dp(12),a.dp(8),0,a.dp(8));line.addView(activity);a.body.addView(line);
@@ -48,24 +48,27 @@ final class ComparisonScreen {
     void render(JSONObject result){
         String state=result.optString("state");boolean done=state.equals("complete");
         double elapsed=result.optDouble("elapsed_seconds",0);
-        progress.setProgress(done?200:(int)(elapsed*10));
+        double budget=result.optDouble("budget_seconds",60);
+        progress.setMax((int)(budget*10));progress.setProgress(done?progress.getMax():(int)(elapsed*10));
         StringBuilder summary=new StringBuilder();int completed=0,total=0;
         for(JSONObject row:Net.objects(result.optJSONArray("providers"))){
             String phase=row.optString("state"),label;
             switch(phase){
                 case "resolving":label="Finding video links";break;
                 case "testing":label="Testing video samples";break;
+                case "validating":label="Checking video and audio";break;
                 case "waiting":label="Waiting for sample test";break;
                 case "ready":label="Passed";completed++;break;
                 case "unavailable":label=row.optString("reason","No working sample");completed++;break;
                 case "timed_out":label="Timed out";completed++;break;
                 default:label="Queued";
             }
+            if(phase.equals("testing")||phase.equals("validating"))label+=" (up to "+result.optInt("test_budget_seconds",20)+"s per source)";
             total++;summary.append(row.optString("name")).append("  -  ").append(label).append('\n');
         }
         rows.setText(summary.toString().trim());
         rows.setVisibility(total==0?View.GONE:View.VISIBLE);
-        activity.setText(String.format(Locale.UK,"%d of %d providers checked  ·  %.0f / 20 seconds",completed,total,elapsed));
+        activity.setText(String.format(Locale.UK,"%d of %d providers checked  ·  %.0f / %.0f seconds",completed,total,elapsed,budget));
         finish.setEnabled(!finishing&&result.optInt("working")>0&&!done);
         if(done){
             stopped=true;spinner.setVisibility(View.GONE);activity.setPadding(0,a.dp(8),0,a.dp(8));a.comparison=null;finish.setVisibility(View.GONE);cancelButton.setText("Back to details");

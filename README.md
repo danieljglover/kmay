@@ -17,7 +17,7 @@ For a self-hosted proxy, open **Settings → Manage sources → Configure server
 - Films and series browsing, search, collections and continue watching.
 - Remote navigation, native HLS/DASH playback, subtitles and playback controls.
 - Optional server-side source discovery and daily verification.
-- A visible comparison of enabled sources before automatic playback, with a 20-second deadline, cancellation and early selection.
+- A visible comparison of enabled sources before automatic playback, with up to 20 seconds of active testing per connected source and a 60-second overall deadline, cancellation and early selection.
 - Audio and video segment checks, tested HLS variant selection and fallback to alternate working streams.
 - Source availability diagnostics distinguish discovered entries from verified playback integrations.
 

@@ -33,6 +33,41 @@ def candidates(*names):
     return [{'id': name, 'name': name} for name in names]
 
 
+def test_resolution_and_queue_wait_do_not_consume_source_test_allowance():
+    async def run():
+        class DelayedProviders(Providers):
+            async def resolve(self, key, title):
+                await asyncio.sleep(.08)
+                return await super().resolve(key, title)
+        async def delayed_sample(network, stream):
+            await asyncio.sleep(.08)
+            return await sample(network, stream)
+        jobs = Comparisons(None, DelayedProviders(), Relay(), budget=1,
+                           test_budget=.12, measure_fn=delayed_sample)
+        key = jobs.start({}, candidates('good', 'fast', 'third'), 'http://proxy')
+        await jobs.jobs[key]['task']
+        result = jobs.snapshot(key)
+        assert result['working'] == 3
+        assert all(row['state'] == 'ready' for row in result['providers'])
+        assert result['elapsed_seconds'] >= .3
+        assert all(row['test_seconds'] <= .12 for row in result['providers'])
+    asyncio.run(run())
+
+
+def test_connected_source_has_its_own_deadline():
+    async def run():
+        async def stalled_sample(network, stream):
+            await asyncio.sleep(10)
+        jobs = Comparisons(None, Providers(), Relay(), budget=1,
+                           test_budget=.03, measure_fn=stalled_sample)
+        key = jobs.start({}, candidates('good'), 'http://proxy')
+        await jobs.jobs[key]['task']
+        result = jobs.snapshot(key)
+        assert result['providers'][0]['state'] == 'timed_out'
+        assert result['elapsed_seconds'] < .5 and result['working'] == 0
+    asyncio.run(run())
+
+
 def test_deadline_ranking_redaction_and_fallback():
     async def run():
         providers = Providers()
